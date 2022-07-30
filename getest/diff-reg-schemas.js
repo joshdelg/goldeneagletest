@@ -2,7 +2,6 @@ const fs = require('fs');
 const got = require('got');
 const cheerio = require('cheerio');
 const regression = require('regression');
-const { createSecureServer } = require('http2');
 
 const meetIdentifiers = {
     hitw2018Id: 143752,
@@ -51,44 +50,55 @@ const readableToSeconds = (read) => {
     }
 }*/
 
-// ?? Main Refactor as 1 function
-// ! Todo use athleteId to get school and with selector S-{season} T-{schoolID} remove unattached seasons
 const getAthleteData = async(athleteId, season, meetIdToRemove, cutoffMeetId) => {
     try {
         const response = await got(`https://www.athletic.net/CrossCountry/Athlete.aspx?AID=${athleteId}`);
         const $ = cheerio.load(response.body);
-        const allTimes = $(`div[id*="S-${season}"]`).children().last();
-        let season5kTable;
-
-        allTimes.children().each((i, el) => {
-            if(el.name === 'h5' && $(el).text() === '5,000 Meters') {
-                season5kTable = $(el).next();
-            }
-        })
-
+        const seasons = $(`div[id*="S-${season}"]`);
         let athleteResults = [];
-        $('tr', season5kTable).each((i, el) => {
-            const placeElement = $(el).children()[0];
-            const resultElement = $(el).children()[1];
-            const dateElement = $(el).children()[2];
-            const meetElement = $(el).children()[3];
-            const meetLink = $('a', meetElement).attr().href;
-
-            athleteResults.push({
-                place: parseInt($(placeElement).text()),
-                timeReadable: $(resultElement).text().replace(/[a-zA-Z]{2}/g, ""),
-                time: readableToSeconds($(resultElement).text().replace(/[a-zA-Z]{2}/g, "")),
-                date: $(dateElement).text(),
-                meetName: $(meetElement).text(),
-                meetId: meetLink.match(/\d+/g)[0],
-                raceId: meetLink.match(/\d+/g)[1],
-                isSR: $(resultElement).text().includes("SR") || $(resultElement).text().includes("PR"),
-                isPR: $(resultElement).text().includes("PR")
+        $(seasons).each((si, sel) => {
+            const seasonHeader = $(sel).children().first();
+            const gradeText = $('span', seasonHeader).text();
+            const raceTable = $(sel).children().last();
+            $('table', raceTable).each((ti, tel) => {
+                const distance = $(tel).prev().text();
+                $('tr', tel).each((i, el) => {
+                    const placeElement = $(el).children()[0];
+                    const resultElement = $(el).children()[1];
+                    const dateElement = $(el).children()[2];
+                    const meetElement = $(el).children()[3];
+                    const meetLink = $('a', meetElement).attr().href;
+        
+                    athleteResults.push({
+                        place: parseInt($(placeElement).text()),
+                        grade: parseInt(gradeText.replace("th Grade", "")),
+                        timeReadable: $(resultElement).text().replace(/[a-zA-Z]{2}/g, ""),
+                        time: readableToSeconds($(resultElement).text().replace(/[a-zA-Z]{2}/g, "")),
+                        distance: distance.replace(",", ""),
+                        date: `${$(dateElement).text()}, ${season}`,
+                        meetName: $(meetElement).text(),
+                        meetId: meetLink.match(/\d+/g)[0],
+                        raceId: meetLink.match(/\d+/g)[1],
+                        isSR: $(resultElement).text().includes("SR") || $(resultElement).text().includes("PR"),
+                        isPR: $(resultElement).text().includes("PR")
+                    });
+                })
             });
-        })
-        //console.log(athleteResults);
+        });
+        //const allTimes = $(`div[id*="S-${season}"]`).children().last();
+        
+        //let season5kTable;
 
-        let athleteData = {
+        // allTimes.children().each((i, el) => {
+        //     if(el.name === 'h5' && $(el).text() === '5,000 Meters') {
+        //         season5kTable = $(el).next();
+        //     }
+        // })
+
+        
+        console.log(athleteResults);
+
+        /*let athleteData = {
 
         };
 
@@ -125,7 +135,7 @@ const getAthleteData = async(athleteId, season, meetIdToRemove, cutoffMeetId) =>
             }
         }
 
-        return athleteData;
+        return athleteData;*/
     } catch (err) {
         console.log("Error getting athlete data", err);
         return null;
@@ -489,8 +499,9 @@ Time vs. Min Time before Race {
 
 }
 
-//getAthleteData(13955486, 2019, meetIdentifiers.hitw2019Id, meetIdentifiers.hitw2019Id).then(t => console.log(t));
-getRaceResults().then((res) => processData(res, 2019, true).then(d => buildRegressionModel(d)));
+// getAthleteData(13955486, 2019, meetIdentifiers.hitw2019Id, meetIdentifiers.hitw2019Id).then(t => console.log(t));
+getAthleteData(8704536, 2018, "", "");
+//getRaceResults().then((res) => processData(res, 2019, true).then(d => buildRegressionModel(d)));
 //getAverageTime(13955486, 2021, "").then((t) => console.log(secondsToReadable(t)));
 //getRaceResults().then((results) => processData(results, true).then(d => buildRegressionModel(d)));
 //getAthletePR(13955486, 2021).then((pr) => console.log(secondsToReadable(pr)));
